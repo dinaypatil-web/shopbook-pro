@@ -35,9 +35,13 @@ import VendorListPage from './pages/parties/VendorListPage';
 import InventoryListPage from './pages/inventory/InventoryListPage';
 import AddProductPage from './pages/inventory/AddProductPage';
 import OrdersPage from './pages/orders/OrdersPage';
+import CreateOrderPage from './pages/orders/CreateOrderPage';
 
 // Reports
 import ReportsPage from './pages/reports/ReportsPage';
+
+// Settings
+import SettingsPage from './pages/settings/SettingsPage';
 
 // --- Route Protection Component ---
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -113,15 +117,11 @@ export default function App() {
             <Route path="inventory/new" element={<AddProductPage />} />
             
             <Route path="orders" element={<OrdersPage />} />
+            <Route path="orders/new" element={<CreateOrderPage />} />
             
             <Route path="reports" element={<ReportsPage />} />
 
-            <Route path="settings" element={
-              <div className="card" style={{ padding: 48, textAlign: 'center' }}>
-                <h3>Settings Module</h3>
-                <p>Tax configuration and print templates coming soon.</p>
-              </div>
-            } />
+            <Route path="settings" element={<SettingsPage />} />
           </Route>
         </Routes>
       </AuthProvider>

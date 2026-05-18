@@ -16,6 +16,15 @@ import { addDocument, updateDocument, deleteDocument, collectionPath, writeBatch
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export interface BusinessSettings {
+  id: string;
+  name: string;
+  gstNumber: string;
+  address?: string;
+  taxRate?: number;
+  invoiceTerms?: string;
+}
+
 export interface Account {
   id: string;
   name: string;
@@ -96,7 +105,23 @@ export interface Invoice {
   createdAt: Timestamp;
 }
 
+export interface Order {
+  id: string;
+  orderNumber: string;
+  type: 'sale' | 'purchase';
+  partyId: string;
+  partyName: string;
+  lineItems: Array<{ itemId?: string; name: string; qty: number; rate: number; tax: number }>;
+  totalAmount: number;
+  taxAmount: number;
+  discount: number;
+  status: 'pending' | 'fulfilled' | 'cancelled';
+  date: string;
+  createdAt: Timestamp;
+}
+
 interface BusinessContextType {
+  business: BusinessSettings | null;
   accounts: Account[];
   transactions: Transaction[];
   inventory: InventoryItem[];
@@ -104,6 +129,7 @@ interface BusinessContextType {
   vendors: Vendor[];
   invoices: Invoice[];
   purchases: Purchase[];
+  orders: Order[];
   loading: boolean;
   lowStockCount: number;
   totalReceivables: number;
@@ -120,7 +146,10 @@ interface BusinessContextType {
   addVendor: (data: Omit<Vendor, 'id'>) => Promise<void>;
   addInvoice: (data: Omit<Invoice, 'id' | 'createdAt'>) => Promise<void>;
   addPurchase: (data: Omit<Purchase, 'id' | 'createdAt'>) => Promise<void>;
+  addOrder: (data: Omit<Order, 'id' | 'createdAt'>) => Promise<void>;
   updateInvoiceStatus: (id: string, status: Invoice['status']) => Promise<void>;
+  updateOrderStatus: (id: string, status: Order['status'], generateRecord?: boolean) => Promise<void>;
+  updateBusinessSettings: (data: Partial<BusinessSettings>) => Promise<void>;
 }
 
 const BusinessContext = createContext<BusinessContextType | null>(null);
@@ -129,6 +158,7 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
   const { profile, encryptionKey } = useAuth();
   const businessId = profile?.businessId || '';
 
+  const [business, setBusiness] = useState<BusinessSettings | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -136,6 +166,7 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
   // ── Real-time listeners ───────────────────────────────────────────────────
@@ -148,6 +179,16 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
 
     const unsubs: Array<() => void> = [];
     const key = encryptionKey;
+
+    // Business Settings
+    const bizRef = doc(db, 'businesses', businessId);
+    unsubs.push(
+      onSnapshot(bizRef, snap => {
+        if (snap.exists()) {
+          setBusiness({ id: snap.id, ...snap.data() } as BusinessSettings);
+        }
+      })
+    );
 
     // Accounts
     const acctRef = collection(db, collectionPath(businessId, 'accounts'));
@@ -265,6 +306,29 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
               ? JSON.parse(decryptDocument(raw, ['lineItems'], key).lineItems as string || '[]')
               : [],
           } as Purchase;
+        }));
+      })
+    );
+
+    // Orders
+    const ordersQuery = query(
+      collection(db, collectionPath(businessId, 'orders')),
+      orderBy('createdAt', 'desc'),
+      limit(50)
+    );
+    unsubs.push(
+      onSnapshot(ordersQuery, snap => {
+        setOrders(snap.docs.map(d => {
+          const raw = { id: d.id, ...d.data() } as any;
+          return {
+            ...raw,
+            totalAmount: decryptNumber(raw.totalAmount_enc, key),
+            taxAmount: decryptNumber(raw.taxAmount_enc, key),
+            discount: decryptNumber(raw.discount_enc, key),
+            lineItems: raw.lineItems_enc
+              ? JSON.parse(decryptDocument(raw, ['lineItems'], key).lineItems as string || '[]')
+              : [],
+          } as Order;
         }));
       })
     );
@@ -401,12 +465,91 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
     await updateDocument(col('invoices'), id, { status });
   };
 
+  const addOrder = async (data: Omit<Order, 'id' | 'createdAt'>) => {
+    const { encryptValue } = await import('../lib/crypto');
+    await addDocument(col('orders'), {
+      orderNumber: data.orderNumber,
+      type: data.type,
+      partyId: data.partyId,
+      partyName: data.partyName,
+      lineItems_enc: encryptValue(JSON.stringify(data.lineItems), key),
+      totalAmount_enc: encryptValue(data.totalAmount, key),
+      taxAmount_enc: encryptValue(data.taxAmount, key),
+      discount_enc: encryptValue(data.discount, key),
+      status: data.status,
+      date: data.date,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    });
+  };
+
+  const updateOrderStatus = async (id: string, status: Order['status'], generateRecord?: boolean) => {
+    const order = orders.find(o => o.id === id);
+    if (!order) throw new Error('Order not found');
+
+    const batch = writeBatch(db);
+    const orderRef = doc(db, col('orders'), id);
+    batch.update(orderRef, { status, updatedAt: Timestamp.now() });
+
+    if (status === 'fulfilled' && generateRecord) {
+      const { encryptValue } = await import('../lib/crypto');
+      if (order.type === 'sale') {
+        const invRef = doc(collection(db, col('invoices')));
+        batch.set(invRef, {
+          invoiceNumber: `INV-${order.orderNumber}`,
+          customerId: order.partyId,
+          customerName: order.partyName,
+          lineItems_enc: encryptValue(JSON.stringify(order.lineItems), key),
+          totalAmount_enc: encryptValue(order.totalAmount, key),
+          taxAmount_enc: encryptValue(order.taxAmount, key),
+          discount_enc: encryptValue(order.discount, key),
+          status: 'draft',
+          dueDate: order.date,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+        });
+        
+        for (const item of order.lineItems) {
+          if (item.itemId && item.qty > 0) {
+            batch.update(doc(db, col('inventory'), item.itemId), { quantity: increment(-item.qty), updatedAt: Timestamp.now() });
+          }
+        }
+      } else if (order.type === 'purchase') {
+        const purchRef = doc(collection(db, col('purchases')));
+        batch.set(purchRef, {
+          purchaseNumber: `PO-${order.orderNumber}`,
+          vendorId: order.partyId,
+          vendorName: order.partyName,
+          lineItems_enc: encryptValue(JSON.stringify(order.lineItems), key),
+          totalAmount_enc: encryptValue(order.totalAmount, key),
+          taxAmount_enc: encryptValue(order.taxAmount, key),
+          discount_enc: encryptValue(order.discount, key),
+          status: 'received',
+          date: order.date,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+        });
+
+        for (const item of order.lineItems) {
+          if (item.itemId && item.qty > 0) {
+            batch.update(doc(db, col('inventory'), item.itemId), { quantity: increment(item.qty), updatedAt: Timestamp.now() });
+          }
+        }
+      }
+    }
+    await batch.commit();
+  };
+
+  const updateBusinessSettings = async (data: Partial<BusinessSettings>) => {
+    await updateDocument('businesses', businessId, data);
+  };
+
   return (
     <BusinessContext.Provider value={{
-      accounts, transactions, inventory, customers, vendors, invoices, purchases,
+      business, accounts, transactions, inventory, customers, vendors, invoices, purchases, orders,
       loading, lowStockCount, totalReceivables, totalPayables, cashBalance, bankBalance,
       addTransaction, addInventoryItem, updateInventoryItem, deleteInventoryItem,
-      addCustomer, addVendor, addInvoice, addPurchase, updateInvoiceStatus,
+      addCustomer, addVendor, addInvoice, addPurchase, addOrder, updateInvoiceStatus, updateBusinessSettings, updateOrderStatus,
     }}>
       {children}
     </BusinessContext.Provider>

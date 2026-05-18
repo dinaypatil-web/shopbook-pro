@@ -1,0 +1,39 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwnerOrMember(businessId) {
+      let biz = get(/databases/$(database)/documents/businesses/$(businessId)).data;
+      return isAuthenticated() && (biz.ownerId == request.auth.uid || request.auth.uid in biz.members);
+    }
+
+    // User profile: only the user themselves can read/write their profile.
+    match /users/{userId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Business metadata
+    match /businesses/{businessId} {
+      // Must be a member to read
+      allow read: if isOwnerOrMember(businessId);
+      // Only owner can update/delete
+      allow update, delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+      // Any auth'd user can create one, making themselves owner
+      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
+      
+      // All Subcollections under business
+      match /{subcollection}/{docId} {
+        // Members have full CRUD access
+        // Admin/Staff differentiation can be added here using custom claims or role fields.
+        allow create, read, update, delete: if isOwnerOrMember(businessId);
+      }
+    }
+    
+  }
+}

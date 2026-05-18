@@ -8,9 +8,9 @@ import toast from 'react-hot-toast';
 import { useBusiness } from '../../contexts/BusinessContext';
 
 const schema = z.object({
-  customerId: z.string().min(1, 'Select a customer'),
-  invoiceNumber: z.string().min(1, 'Invoice number required'),
-  dueDate: z.string().min(1, 'Due date required'),
+  vendorId: z.string().min(1, 'Select a vendor'),
+  purchaseNumber: z.string().min(1, 'Purchase number required'),
+  date: z.string().min(1, 'Date required'),
   lineItems: z.array(z.object({
     itemId: z.string().optional(),
     name: z.string().min(1, 'Item name required'),
@@ -23,22 +23,21 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
-export default function CreateInvoicePage() {
+export default function CreatePurchasePage() {
   const navigate = useNavigate();
-  const { customers, inventory, addInvoice, invoices } = useBusiness();
+  const { vendors, inventory, addPurchase, purchases } = useBusiness();
   const [loading, setLoading] = useState(false);
 
-  // Auto-generate invoice number based on history
-  const defaultInvoiceNo = `INV-${new Date().getFullYear()}-${String(invoices.length + 1).padStart(3, '0')}`;
+  // Auto-generate purchase number
+  const defaultPurchaseNo = `PO-${new Date().getFullYear()}-${String(purchases.length + 1).padStart(3, '0')}`;
   
-  const defaultDueDate = new Date();
-  defaultDueDate.setDate(defaultDueDate.getDate() + 15);
+  const defaultDate = new Date().toISOString().split('T')[0];
 
   const { register, control, handleSubmit, watch, setValue, formState: { errors } } = useForm<any>({
     resolver: zodResolver(schema),
     defaultValues: {
-      invoiceNumber: defaultInvoiceNo,
-      dueDate: defaultDueDate.toISOString().split('T')[0],
+      purchaseNumber: defaultPurchaseNo,
+      date: defaultDate,
       lineItems: [{ itemId: '', name: '', qty: 1, rate: 0, tax: 0 }],
       discount: 0,
     },
@@ -63,23 +62,23 @@ export default function CreateInvoicePage() {
   const onSubmit = async (data: FormData) => {
     setLoading(true);
     try {
-      const cust = customers.find(c => c.id === data.customerId);
-      await addInvoice({
-        invoiceNumber: data.invoiceNumber,
-        customerId: data.customerId,
-        customerName: cust?.name || 'Unknown',
+      const vendor = vendors.find(v => v.id === data.vendorId);
+      await addPurchase({
+        purchaseNumber: data.purchaseNumber,
+        vendorId: data.vendorId,
+        vendorName: vendor?.name || 'Unknown',
         lineItems: data.lineItems,
         totalAmount,
         taxAmount,
         discount: data.discount,
         status: 'draft',
-        dueDate: data.dueDate,
+        date: data.date,
       });
-      toast.success('Invoice created securely');
-      navigate('/billing');
+      toast.success('Purchase recorded securely');
+      navigate('/purchases');
     } catch (e: any) {
       console.error(e);
-      toast.error('Failed to create invoice');
+      toast.error('Failed to create purchase');
     } finally {
       setLoading(false);
     }
@@ -92,8 +91,8 @@ export default function CreateInvoicePage() {
           <ArrowLeft size={18} />
         </button>
         <div className="page-header-left" style={{ flex: 1 }}>
-          <h2>Create Invoice</h2>
-          <p>Generate a GST-ready, encrypted invoice.</p>
+          <h2>Record Purchase</h2>
+          <p>Add new stock and record a purchase from a vendor.</p>
         </div>
       </div>
 
@@ -102,29 +101,29 @@ export default function CreateInvoicePage() {
         <div className="card card-pad" style={{ marginBottom: 24 }}>
           <div className="form-grid form-grid-3">
             <div className="form-group">
-              <label className="form-label required">Customer</label>
-              <select {...register('customerId')} className={`form-control ${errors.customerId ? 'error' : ''}`}>
-                <option value="">Select Customer</option>
-                {customers.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+              <label className="form-label required">Vendor</label>
+              <select {...register('vendorId')} className={`form-control ${errors.vendorId ? 'error' : ''}`}>
+                <option value="">Select Vendor</option>
+                {vendors.map(v => (
+                  <option key={v.id} value={v.id}>{v.name}</option>
                 ))}
               </select>
-              {errors.customerId?.message && <span className="form-error">{String(errors.customerId.message)}</span>}
+              {errors.vendorId?.message && <span className="form-error">{String(errors.vendorId.message)}</span>}
               <div style={{ marginTop: 4, fontSize: 12 }}>
                 <button type="button" className="btn btn-ghost" style={{ padding: 0, height: 'auto', color: 'var(--brand)' }}>
-                  + New Customer
+                  + New Vendor
                 </button>
               </div>
             </div>
 
             <div className="form-group">
-              <label className="form-label required">Invoice Number</label>
-              <input {...register('invoiceNumber')} className="form-control" />
+              <label className="form-label required">Purchase Order No.</label>
+              <input {...register('purchaseNumber')} className="form-control" />
             </div>
 
             <div className="form-group">
-              <label className="form-label required">Due Date</label>
-              <input type="date" {...register('dueDate')} className="form-control" />
+              <label className="form-label required">Date</label>
+              <input type="date" {...register('date')} className="form-control" />
             </div>
           </div>
         </div>
@@ -132,7 +131,7 @@ export default function CreateInvoicePage() {
         {/* Line items */}
         <div className="card" style={{ marginBottom: 24 }}>
           <div className="card-header">
-            <h3 className="card-title">Line Items</h3>
+            <h3 className="card-title">Line Items (Stock will be added to inventory)</h3>
           </div>
           <div className="table-container" style={{ border: 'none', borderRadius: 0 }}>
             <table>
@@ -164,7 +163,7 @@ export default function CreateInvoicePage() {
                               if (item) {
                                 setValue(`lineItems.${index}.itemId`, item.id);
                                 setValue(`lineItems.${index}.name`, item.name);
-                                setValue(`lineItems.${index}.rate`, item.sellingPrice);
+                                setValue(`lineItems.${index}.rate`, item.costPrice);
                               }
                             } else {
                               setValue(`lineItems.${index}.itemId`, '');
@@ -249,7 +248,7 @@ export default function CreateInvoicePage() {
             </div>
 
             <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
-              {loading ? <span className="spinner spinner-sm" /> : 'Save Invoice'}
+              {loading ? <span className="spinner spinner-sm" /> : 'Save Purchase'}
             </button>
           </div>
         </div>

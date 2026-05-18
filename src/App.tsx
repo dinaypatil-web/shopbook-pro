@@ -20,10 +20,12 @@ import AddTransactionPage from './pages/transactions/AddTransactionPage';
 import LedgerPage from './pages/accounting/LedgerPage';
 import JournalPage from './pages/accounting/JournalPage';
 
-// Billing
+// Billing & Purchases
 import InvoiceListPage from './pages/billing/InvoiceListPage';
 import CreateInvoicePage from './pages/billing/CreateInvoicePage';
 import InvoiceViewPage from './pages/billing/InvoiceViewPage';
+import PurchaseListPage from './pages/purchases/PurchaseListPage';
+import CreatePurchasePage from './pages/purchases/CreatePurchasePage';
 
 // Parties
 import CustomerListPage from './pages/parties/CustomerListPage';
@@ -100,6 +102,9 @@ export default function App() {
             <Route path="billing" element={<InvoiceListPage />} />
             <Route path="billing/new" element={<CreateInvoicePage />} />
             <Route path="billing/:id" element={<InvoiceViewPage />} />
+
+            <Route path="purchases" element={<PurchaseListPage />} />
+            <Route path="purchases/new" element={<CreatePurchasePage />} />
             
             <Route path="customers" element={<CustomerListPage />} />
             <Route path="vendors" element={<VendorListPage />} />

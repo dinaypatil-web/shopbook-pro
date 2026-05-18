@@ -13,6 +13,8 @@ import {
   limit,
   Timestamp,
   onSnapshot,
+  writeBatch,
+  increment,
 } from 'firebase/firestore';
 import type { WhereFilterOp, Query, DocumentData, QueryConstraint } from 'firebase/firestore';
 import { db } from './firebase';
@@ -71,7 +73,7 @@ export async function getDocuments(
 
 // ─── Query Builders ──────────────────────────────────────────────────────────
 
-export { where, orderBy, limit, Timestamp, onSnapshot, query, collection, doc };
+export { where, orderBy, limit, Timestamp, onSnapshot, query, collection, doc, writeBatch, increment };
 
 // ─── Timestamp Utils ─────────────────────────────────────────────────────────
 

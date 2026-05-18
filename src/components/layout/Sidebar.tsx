@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Receipt, Package, Users, Truck,
   FileText, BarChart3, ShoppingCart, BookOpen, ChevronLeft,
-  ChevronRight, LogOut, Settings, Store, Shield,
+  ChevronRight, LogOut, Settings, Store, Shield, Inbox,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -57,6 +57,7 @@ export default function Sidebar({
       label: 'Operations',
       items: [
         { to: '/inventory', icon: <Package size={18} />, label: 'Inventory', badge: lowStockCount || undefined },
+        { to: '/purchases', icon: <Inbox size={18} />, label: 'Purchases' },
         { to: '/orders', icon: <ShoppingCart size={18} />, label: 'Orders' },
       ],
     },
